@@ -71,6 +71,10 @@ print(classification_report(y_test, y_pred, target_names=label_encoder.classes_)
 app = Flask(__name__)
 CORS(app)  # Allow all domains for CORS
 
+@app.route('/', methods=['GET'])
+def index():
+    return "SMS Detection API is running."
+
 @app.route('/predict', methods=['POST'])
 def predict():
     data = request.get_json()
