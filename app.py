@@ -18,12 +18,17 @@ nltk.download('stopwords')
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from collections import Counter
 
 # 1. Load dataset from CSV
-df = pd.read_csv('dataset.csv')
+df = pd.read_csv("dataset.csv", usecols=[0, 1], names=["label", "text"], header=0)
+df = df[df["label"].isin(["ham", "spam"])]
+df = df.dropna(subset=["text"])
 
 # 2. Preprocessing function
 def clean_text(text):
+    if not isinstance(text, str):
+        return ""
     text = text.lower()
     text = re.sub(r"[^a-zA-Z\s]", "", text)
     tokens = text.split()
@@ -37,15 +42,21 @@ df["clean_text"] = df["text"].apply(clean_text)
 
 # 3. Encode labels
 label_encoder = LabelEncoder()
-y = label_encoder.fit_transform(df["label"])  # ham=0, smish=1
+y = label_encoder.fit_transform(df["label"])  # ham=0, spam=1
 
 # 4. TF-IDF feature extraction
 vectorizer = TfidfVectorizer()
 X_tfidf = vectorizer.fit_transform(df["clean_text"])
 
 # 5. SMOTE oversampling to balance data
-smote = SMOTE(random_state=42, k_neighbors=2)
-X_resampled, y_resampled = smote.fit_resample(X_tfidf, y)
+minority_class_size = min(Counter(y).values())
+if minority_class_size > 1:
+    smote = SMOTE(random_state=42, k_neighbors=1)
+    X_resampled, y_resampled = smote.fit_resample(X_tfidf, y)
+    print("Applied SMOTE")
+else:
+    X_resampled, y_resampled = X_tfidf, y
+    print("⚠️ SMOTE skipped: not enough samples in minority class.")
 
 # 6. Split dataset
 X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
@@ -93,7 +104,7 @@ def predict():
         "prediction": label,
         "confidence": {
             "ham": round(float(prob[0][label_encoder.transform(['ham'])[0]]) * 100, 2),
-            "smish": round(float(prob[0][label_encoder.transform(['smish'])[0]]) * 100, 2)
+            "spam": round(float(prob[0][label_encoder.transform(['spam'])[0]]) * 100, 2)
         }
     }
     return jsonify(report)
